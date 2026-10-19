@@ -41,7 +41,56 @@ NettyRoutingFilter                 // 用 Netty HttpClient 发起远程调用
 NettyWriteResponseFilter           // 包裹整条链，最后把下游响应写回客户端
 ```
 
-![gateway-chain](https://cdn.nlark.com/yuque/0/2026/png/28840108/1792337656606-6bf2d06a-079e-4b72-8887-87b7f11fe63c.png)
+```plantuml
+@startuml SpringGateway全景链路
+skinparam defaultFontName "Microsoft YaHei"
+skinparam rectangle {
+    BackgroundColor #E74C3C
+    FontColor white
+    BorderColor #C0392B
+}
+skinparam rectangle<<filter>> {
+    BackgroundColor #7F8C8D
+    FontColor white
+    BorderColor #566573
+}
+
+actor "客户端" as client #White
+
+rectangle "ReactorHttpHandlerAdapter\napply()\n(Netty ↔ Spring 适配入口)" as A
+rectangle "HttpWebHandlerAdapter\nhandle()\n封装 ServerWebExchange" as B
+rectangle "ExceptionHandlingWebHandler\nhandle()\n全局异常处理" as C
+rectangle "FilteringWebHandler (WebFlux)\nhandle()\n执行 WebFilter" as CW
+rectangle "DispatcherHandler\nhandle()\nHandlerMapping 查找 Handler" as D
+rectangle "RoutePredicateHandlerMapping\ngetHandlerInternal()\n匹配 Route" as RPHM
+rectangle "DispatcherHandler\ninvokeHandler()\n执行 Handler 对象" as E
+rectangle "FilteringWebHandler (Gateway)\nhandle()\n合并+排序过滤器\nnew DefaultGatewayFilterChain" as F
+rectangle "DefaultGatewayFilterChain\nfilter()\n执行所有过滤器(接力)" as G
+
+rectangle "RouteToRequestUrlFilter\nfilter()\n封装目标 URL (lb://)" as H <<filter>>
+rectangle "ReactiveLoadBalancerClientFilter\nfilter()\n负载均衡 lb:// → http://ip:port" as I <<filter>>
+rectangle "NettyRoutingFilter\nfilter()\nNetty HttpClient 执行远程调用" as J <<filter>>
+rectangle "NettyWriteResponseFilter\n(post 阶段)写回下游响应" as K <<filter>>
+
+client --> A
+A --> B
+B --> C
+C --> CW
+CW --> D
+D --> RPHM
+RPHM --> E
+E --> F
+F --> G
+G --> H
+H --> I
+I --> J
+J ..> K : 响应回来后才写回
+@enduml
+```
+
+> 说明：红色为 WebFlux 主干处理链（自上而下），灰色为进入 Gateway 过滤器链后按 order 依次执行的 `GlobalFilter`。`NettyWriteResponseFilter`(order=-1) 虽在链头注册，但写回动作挂在链尾 post 阶段，故用虚线表示。
+>
+> ℹ️ 最顶端的 `ReactorHttpHandlerAdapter.apply()`（Netty 请求如何进入 Spring 链）的启动与绑定细节，见第十二节。
 
 > ⚠️ 注意：链路里有**两个 `FilteringWebHandler`**，容易混淆：
 > - WebFlux 自带的 `org.springframework.web.server.FilteringWebHandler`：执行的是 **`WebFilter`**（进程级，早于路由匹配）。
@@ -116,7 +165,7 @@ public Mono<Void> handle(ServerHttpRequest request, ServerHttpResponse response)
    本质是 `Flux.just(routes).filter(p -> p.apply(exchange)).next()`，**取第一个匹配上的 Route**。
 2. **命中后**把 Route 写入 `exchange` 的 `GATEWAY_ROUTE_ATTR`，并返回一个 handler（`FilteringWebHandler` 的适配），交给 `invokeHandler` 执行。
 
-### 3.1 Route 是怎么来的（原笔记缺失，重要）
+### 3.1 Route 是怎么来的
 
 配置文件里的 `spring.cloud.gateway.routes` 并不会直接变成可执行对象，中间有一串装配：
 
@@ -138,7 +187,7 @@ CachingRouteLocator
 
 - **动态刷新原理**：Nacos 配置变更 / actuator `/actuator/refresh` → 发布 `RefreshRoutesEvent` → `CachingRouteLocator` 清空缓存并重新 `getRoutes()` → 新路由生效，无需重启。本项目通过 Nacos 做动态路由就是走这条路径。
 
-### 3.2 Predicate 断言体系（原笔记缺失）
+### 3.2 Predicate 断言体系
 
 - 每个 `RoutePredicateFactory`（如 `Path`、`Method`、`After`、`Between`、`Header`、`Host`…）生成一个 `Predicate<ServerWebExchange>`。
 - yml 里 `- Path=/user/**` 这种简写，由 `ShortcutConfigurable` 解析成工厂参数。
@@ -177,7 +226,7 @@ public Mono<Void> handle(ServerWebExchange exchange, Route route) {
 
 ![filtering-webhandler](https://cdn.nlark.com/yuque/0/2026/png/28840108/1792391220077-3d89cb6b-eccc-489d-83c2-f0c163594856.png)
 
-### 4.1 两个概念要分清（原笔记缺失）
+### 4.1 两个概念要分清
 
 - **`GatewayFilter`（路由级）**：由 `GatewayFilterFactory` 根据路由配置里的 `filters:` 创建，**只对配置它的那条路由生效**。例：`AddRequestHeader`、`RewritePath`、`StripPrefix`、以及本项目的限流工厂。
 - **`GlobalFilter`（全局）**：实现 `GlobalFilter`，被 `GatewayFilterAdapter` 适配成 `GatewayFilter`，**对所有路由生效**。例：`RouteToRequestUrlFilter`、`ReactiveLoadBalancerClientFilter`、`NettyRoutingFilter`，以及本项目的 JWT 认证。
@@ -216,7 +265,7 @@ public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
 
 ---
 
-## 五、Order 排序（原笔记缺失，务必背下来）
+## 五、Order 排序
 
 order **越小越先执行**（越靠近链头）。`AnnotationAwareOrderComparator.sort` 决定顺序：
 
@@ -260,7 +309,7 @@ private Mono<ServiceInstance> choose(String serviceId, Object hint) {
 }
 ```
 
-关键点（原笔记只写了一句，需补全）：
+关键点：
 - `ReactorServiceInstanceLoadBalancer` 才是负载均衡策略的实现者（默认**轮询 RoundRobin**，可换**随机 Random**）。
 - 实例列表来源是 Spring Cloud `ServiceInstanceListSupplier`，底层对接注册中心（本项目是 Nacos）。
 - 改写后 `lb://ld-lucky` → `http://192.168.x.x:8080/...`，后面 Netty 才知道连哪台机器。
@@ -363,16 +412,125 @@ NettyWriteResponseFilter       → 读上下文响应，写回客户端
 
 ---
 
-## 十二、进阶方向（下一步细化清单）
+## 十二、Netty 的启动与绑定：整条链路是如何生效的
 
-1. **响应式底座**：Reactor `Mono/Flux` 的懒执行、`flatMap/then/onErrorResume/defer`；`HttpWebHandlerAdapter#handle` 那句链式调用要能逐算子讲清。
-2. **Netty 线程模型**：`NettyReactiveWebServerFactory` 启动 `HttpServer`，boss/worker EventLoop，为什么少量线程能扛高并发。
-3. **自动装配**：`GatewayAutoConfiguration`、`@ConditionalOn...`，理解 yml 里写 `routes` 为何直接生效；`spring.factories`。
-4. **动态路由**：Nacos 变更 → `RefreshRoutesEvent` → `CachingRouteLocator` 重建（对照本项目 `application-nacos.yaml`）。
-5. **异常处理链**：`ExceptionHandlingWebHandler` + 所有 `WebExceptionHandler`；对比业务服务的 `GlobalExceptionHandler` 与网关侧的差异。
-6. **熔断降级**：`CircuitBreaker` Filter（Resilience4j/Sentinel），fallback URI。
-7. **对比 Zuul1**：Netty 长连接 + 响应式 vs Tomcat 线程阻塞，理解选型原因。
-8. **生产调优**：`spring.cloud.gateway.httpclient.*`（connect/response timeout、pool 的 max-idle-time/eviction）、大文件上传、SSE、WebSocket(`ws://`)、`X-Forwarded-*` 处理。
+前面第一节链路图最顶端那个 `ReactorHttpHandlerAdapter.apply()` 到底从哪来、谁把 Netty 起起来、请求又是怎么从 Netty 交接到 Spring 链上的——本节讲透。核心结论：**Gateway 里 Netty 出现在两个独立方向**，不要混淆。
+
+| 方向 | 作用 | Netty 角色 | 关键类 |
+|---|---|---|---|
+| **入站（Server）** | 接收客户端请求 | Reactor Netty 作**内嵌 HTTP 服务器** | `NettyReactiveWebServerFactory` + `ReactorHttpHandlerAdapter` |
+| **出站（Client）** | 转发到下游服务 | Reactor Netty 作**HTTP 客户端** | `GatewayAutoConfiguration#gatewayHttpClient` + `NettyRoutingFilter` |
+
+### 12.1 Netty 从哪来（依赖来源）
+
+`spring-cloud-starter-gateway` 传递依赖了 `spring-boot-starter-webflux`，后者引入 `reactor-netty-http`。当 classpath 上**有 webflux / reactor-netty、且没有 servlet 容器**时，Spring Boot 推断 `WebApplicationType = REACTIVE`，并默认选择 **Reactor Netty** 作为内嵌服务器。这些装配代码都在框架 jar 里，不在本项目中。
+
+### 12.2 入站：Netty 如何被启动并绑定到 Spring 链
+
+```java
+// 1) 应用启动，ReactiveWebServerApplicationContext#refresh → createWebServer()
+//    把整条 WebFlux 处理链（DispatcherHandler → Gateway）包装成 Spring 的 HttpHandler
+HttpHandler httpHandler = WebHttpHandlerBuilder
+        .applicationContext(this.context)   // 这个 HttpHandler 实际就是 HttpWebHandlerAdapter
+        .build();
+
+// 2) 拿到内嵌服务器工厂（自动配置提供的是 NettyReactiveWebServerFactory）
+ReactiveWebServerFactory factory = getWebServerFactory();
+
+// 3) 用 httpHandler 构建 WebServer 并启动
+this.webServer = factory.getWebServer(httpHandler);
+this.webServer.start();
+```
+
+真正的"绑定"发生在 `NettyReactiveWebServerFactory#getWebServer`：
+
+```java
+// 简化：创建 Reactor Netty HttpServer，把 Spring 的 HttpHandler 适配给 Netty，然后 bind 启动
+HttpServer httpServer = createHttpServer()
+        .handle(new ReactorHttpHandlerAdapter(this.httpHandler)) // ★ 桥梁：Netty 请求 → Spring 链
+        .bindNow(); // boss/worker EventLoop 就绪，开始监听端口
+```
+
+`ReactorHttpHandlerAdapter` 实现的是 Reactor Netty 的 `reactor.netty.http.server.HttpHandler` 接口，它的入口方法就是第一节链路图顶端的 `apply()`：
+
+```java
+// ReactorHttpHandlerAdapter：Netty 世界 ↔ Spring 世界的适配器
+public Publisher<Void> apply(HttpServerHttpRequest reactorRequest,
+                             HttpServerHttpResponse reactorResponse) {
+    // 把 Netty 的 HttpServerRequest/Response 转成 Spring 的 ServerHttpRequest/Response
+    ServerHttpRequest springRequest  = new ReactorServerHttpRequest(reactorRequest, bufferFactory);
+    ServerHttpResponse springResponse = new ReactorServerHttpResponse(reactorResponse, bufferFactory);
+    // 交给 Spring 的 HttpHandler（= HttpWebHandlerAdapter.handle），进入那条链
+    return this.httpHandler.handle(springRequest, springResponse);
+}
+```
+
+装配入口链路总结：
+
+```
+Netty EventLoop 收到连接/请求
+   │  (HttpServer.handle 注册的回调)
+   ▼
+ReactorHttpHandlerAdapter.apply()          // ★ Netty → Spring 的交接点
+   ▼
+HttpWebHandlerAdapter.handle()             // 创建 ServerWebExchange（见第二节）
+   ▼
+ExceptionHandlingWebHandler → FilteringWebHandler(WebFlux) → DispatcherHandler
+   ▼
+Gateway 那整条路由/过滤器链
+```
+
+> 一句话：`NettyReactiveWebServerFactory` 负责"起 Netty 服务器"，`ReactorHttpHandlerAdapter` 负责"把 Netty 请求接到 Spring WebFlux 链上"。工厂 bean 由 `ReactiveWebServerFactoryAutoConfiguration` 提供。
+
+### 12.3 出站：转发用的 Netty HttpClient 从哪来
+
+在 Gateway 自己的 `GatewayAutoConfiguration` 里：
+
+```java
+@Bean
+@ConditionalOnMissingBean
+public HttpClient gatewayHttpClient(HttpClientProperties properties) {
+    // 连接池 ConnectionProvider、超时、wiretap 等，对应 spring.cloud.gateway.httpclient.*
+    HttpClient httpClient = HttpClient.create(...);
+    ...
+    return httpClient;
+}
+```
+
+这个 `HttpClient` 被注入进 `NettyRoutingFilter` 的构造函数，`filter()` 里 `this.httpClient.request(...).send(...)` 发请求，底层还是 Reactor Netty，只不过这次是**客户端角色**，连接由 `ConnectionProvider` 池化管理。
+
+> 若改用 `WebClientRoutingFilter`（`WebClient`），出站就不一定是 Netty；但入站服务器默认仍是 Netty。
+
+### 12.4 全链路数据流（把两个方向接起来）
+
+```
+客户端
+  │ TCP
+  ▼
+[入站] Netty HttpServer (boss accept / worker EventLoop, epoll 多路复用)
+  │  有请求 → 回调
+  ▼
+ReactorHttpHandlerAdapter.apply()  →  HttpWebHandlerAdapter.handle()
+  ▼
+DispatcherHandler → RoutePredicateHandlerMapping → FilteringWebHandler(Gateway)
+  ▼
+过滤器链：JWT → RouteToRequestUrl → LoadBalancer → NettyRoutingFilter
+  │  取 GATEWAY_REQUEST_URL_ATTR
+  ▼
+[出站] Netty HttpClient (ConnectionProvider 连接池)  →  下游服务
+  │  下游响应回来（非阻塞回调）
+  ▼
+NettyWriteResponseFilter 在 post 阶段把响应写回客户端
+```
+
+### 12.5 在 IDEA 里跟这段源码的入口
+
+双击 Shift 搜类名即可（均在框架 jar）：
+- `ReactiveWebServerApplicationContext#createWebServer`（装配总入口）
+- `NettyReactiveWebServerFactory#getWebServer`（起 Netty 服务器 + bind）
+- `ReactorHttpHandlerAdapter#apply`（Netty↔Spring 桥梁）
+- `GatewayAutoConfiguration#gatewayHttpClient`（出站 HttpClient）
+- `NettyRoutingFilter`（出站使用）
 
 ---
 
