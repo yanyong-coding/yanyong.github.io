@@ -5,11 +5,11 @@
 # Site
 title: 大勇小记
 subtitle: '技术博客'
-description: '个人技术博客'
-keywords:
-author: yanyong
+description: '大勇的个人技术博客，分享 Spring Cloud Gateway、Text2SQL、SSE 流式输出、后端架构等技术实践与源码解析。'
+keywords: Spring Cloud Gateway, Text2SQL, SSE, Spring Boot, Vue3, 后端架构, 技术博客, 大勇小记
+author: yanyong-coding
 language: zh-CN
-timezone: ''
+timezone: Asia/Shanghai
 
 # URL
 ## Set your site url here. For example, if you use GitHub Page, set url as 'https://username.github.io/project'
@@ -96,7 +96,7 @@ ignore:
 # Extensions
 ## Plugins: https://hexo.io/plugins/
 ## Themes: https://hexo.io/themes/
-theme: landscape
+theme: next
 
 # Deployment
 ## Docs: https://hexo.io/docs/one-command-deployment
