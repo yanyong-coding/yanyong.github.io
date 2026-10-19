@@ -3,11 +3,11 @@
 ## Source: https://github.com/hexojs/hexo/
 
 # Site
-title: 大勇小记
-subtitle: '技术博客'
-description: '大勇的个人技术博客，分享 Spring Cloud Gateway、Text2SQL、SSE 流式输出、后端架构等技术实践与源码解析。'
-keywords: Spring Cloud Gateway, Text2SQL, SSE, Spring Boot, Vue3, 后端架构, 技术博客, 大勇小记
-author: yanyong-coding
+title: 小张的打怪升级之路
+subtitle: '技术博客 · 从菜鸟到大佬'
+description: '小张的个人技术博客，记录 Spring Cloud Gateway、Text2SQL、SSE 流式输出、后端架构等技术打怪升级之路。'
+keywords: Spring Cloud Gateway, Text2SQL, SSE, Spring Boot, Vue3, 后端架构, 技术博客, 打怪升级
+author: 小张
 language: zh-CN
 timezone: Asia/Shanghai
 

@@ -1,0 +1,99 @@
+// ============================================
+// 小张的打怪升级之路 - 自定义样式
+// ============================================
+
+// ---------- 1. 导航栏 Tab 加大 ----------
+.menu .menu-item {
+  margin: 0 12px;
+
+  a, span.exturl {
+    font-size: 1em;              // 原 .8125em，加大到 16px
+    padding: 0 14px;             // 左右内边距
+    line-height: 2.2;            // 上下呼吸空间
+    border-radius: 4px;
+    transition: all .2s ease;
+  }
+
+  .fa, .fab, .far, .fas {
+    margin-right: 6px;
+  }
+}
+
+.menu-item-active a {
+  background: $gainsboro;
+  border-bottom: 2px solid $black-deep !important;
+}
+
+// ---------- 2. Header 优化 ----------
+.site-meta {
+  text-align: center;
+  padding-bottom: 20px;
+}
+
+.site-title {
+  font-size: 1.625em;            // 原 1.375em，加大站点标题
+  font-weight: bold;
+}
+
+.site-subtitle {
+  font-size: $font-size-small;
+  margin-top: 8px;
+}
+
+// ---------- 3. 首页文章卡片优化 ----------
+.index.posts-expand .post-block {
+  padding: 20px 0;
+}
+
+.index.posts-expand .post-header {
+  margin-bottom: 18px;
+}
+
+.index.posts-expand .post-title {
+  font-size: 1.375em;
+  margin-bottom: 6px;
+}
+
+.index.posts-expand .post-meta {
+  font-size: $font-size-small;
+  color: $grey-dark;
+}
+
+// 文章间的分割线更柔和
+.index.posts-expand .post-eof {
+  margin: 50px auto;
+  border-top: none;
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, $grey-light, transparent);
+}
+
+// ---------- 4. 首页文章摘要区 ----------
+.index.posts-expand .post-body {
+  font-size: 1em;
+  line-height: 1.9;
+}
+
+.index.posts-expand .post-button .btn {
+  padding: 8px 20px;
+  font-size: $font-size-small;
+  border-radius: 4px;
+  border: 1px solid $black-deep;
+  transition: all .2s ease;
+
+  &:hover {
+    background: $black-deep;
+    color: white;
+  }
+}
+
+// ---------- 5. 侧边栏优化 ----------
+.sidebar-inner {
+  padding-top: 30px;
+}
+
+// ---------- 6. 文章页（内页）标题 ----------
+.post-block .post-title {
+  font-size: 1.5em;
+  margin-bottom: 8px;
+}
